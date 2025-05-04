@@ -3,15 +3,16 @@ import pandas as pd
 import datetime
 import requests
 import pytz
+import matplotlib.pyplot as plt
 import numpy as np
+import altair as alt  # Required for ordered weekly chart
 
-# Dummy credentials
-USERNAME = "admin"
+# CONFIG
+st.set_page_config(page_title="Smart Pillbox", page_icon="💊", layout="centered")
+
+# --- LOGIN CONFIG ---
+USERNAME = "user"
 PASSWORD = "1234"
-
-# Initialize session state
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
 
 def login():
     st.title("🔐 Login to Smart Pillbox Dashboard")
@@ -25,12 +26,9 @@ def login():
         else:
             st.error("❌ Invalid credentials")
 
-if not st.session_state.logged_in:
+if "logged_in" not in st.session_state or not st.session_state.logged_in:
     login()
-    st.stop()  # Prevent the rest of the app from rendering
-
-# CONFIG
-st.set_page_config(page_title="Smart Pillbox", page_icon="💊", layout="centered")
+    st.stop()
 
 # --- THINKSPEAK CONFIG ---
 CHANNEL_ID = "2912929"
@@ -44,7 +42,7 @@ field_map = {
     "Saturday": "field6",
     "Sunday": "field7",
 }
-alarm_field = "field8"  # Repurposed as alarm status (1 = ON, 0 = OFF)
+alarm_field = "field8"
 
 # --- TIMEZONE CONFIG ---
 IST = pytz.timezone("Asia/Kolkata")
@@ -66,8 +64,11 @@ with st.sidebar:
     """)
 
     st.markdown("---")
-    st.markdown("🔄 Click to manually refresh:")
-    if st.button("Refresh Now"):
+    if st.button("🔓 Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
+    if st.button("🔄 Refresh Now"):
         st.rerun()
 
 # --- HELPER FUNCTIONS ---
@@ -85,71 +86,51 @@ def fetch_data_for_day(field_num):
         feeds = response.json().get("feeds", [])
         times = [convert_to_ist(feed["created_at"]) for feed in feeds]
         values = [int(feed.get(f"field{field_num}") or 0) for feed in feeds]
-
         df = pd.DataFrame({"Time": times, "Pill Taken": values})
         df["Status"] = df["Pill Taken"].apply(lambda x: "Yes" if x > 0 else "No")
         return df
-    else:
-        return pd.DataFrame()  # Return empty DataFrame if fetch fails
+    return pd.DataFrame()
 
 def get_y_axis_ticks(max_value):
-    """Returns an appropriate Y-axis step size based on max value."""
     if max_value <= 10:
-        return 1  # Small increments for small values
+        return 1
     elif max_value <= 100:
-        return 5  # Increments of 5 for values <= 100
+        return 5
     elif max_value <= 500:
-        return 10  # Increments of 10 for values <= 500
+        return 10
     elif max_value <= 1000:
-        return 25  # Increments of 25 for values <= 1000
+        return 25
     else:
-        return 50  # Increments of 50 for larger values
+        return 50
 
 # --- MAIN DASHBOARD ---
 st.title("💊 Smart Pillbox Monitoring Dashboard")
 
-# Default: today's date
 today = datetime.datetime.now(IST).strftime("%A")
-
-# Date picker for selecting specific day
 date_picker = st.date_input("📅 Select Date", datetime.datetime.now(IST))
-
-# Determine the day of the week for the selected date
 selected_day = date_picker.strftime("%A")
 field_num = get_field_number(selected_day)
 
-# Set the graph title dynamically based on the selected date
 if date_picker == datetime.datetime.now(IST).date():
     graph_title = f"📈 Pill Intake Today ({today})"
 else:
     graph_title = f"📈 Pill Intake on {selected_day}, {date_picker.strftime('%Y-%m-%d')}"
 
-# --- FETCH DATA FOR SELECTED DAY ---
 df = fetch_data_for_day(field_num)
 
-# Limit the graph to the past 7 days
 if not df.empty:
-    # Filter the data for the past 7 days
     now = datetime.datetime.now(IST)
     last_seven_days = now - datetime.timedelta(days=7)
     df = df[df["Time"] >= last_seven_days]
 
-    # Display the bar chart for the selected day (number of pills taken each day)
     st.subheader(graph_title)
 
-    # Ensure integer values on Y-Axis and avoid decimals
     df["Pill Taken"] = df["Pill Taken"].astype(int)
-
-    # Determine the maximum value in the 'Pill Taken' column for scaling Y-axis
     max_value = df["Pill Taken"].max()
-
-    # Get an appropriate step size for the Y-axis ticks
     step_size = get_y_axis_ticks(max_value)
 
-    # --- BAR CHART: Number of Pills Taken Each Day ---
     st.bar_chart(df.set_index("Time")["Pill Taken"])
 
-    # --- DAILY SUMMARY ---
     total = df["Pill Taken"].sum()
     last_taken = df[df["Pill Taken"] == 1]
     last_time = last_taken["Time"].max() if not last_taken.empty else None
@@ -165,7 +146,6 @@ if not df.empty:
     st.write(f"⏱️ Last pill taken: **{last_time.strftime('%I:%M %p')}**" if last_time else "❌ No pill taken")
     st.write(f"⏳ Time since last pill: **{hours_ago} hours**" if isinstance(hours_ago, float) else f"❌ {hours_ago}")
 
-    # --- CSV EXPORT ---
     csv = df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Export Data to CSV", csv, file_name=f"{selected_day}_pill_log.csv", mime="text/csv")
 else:
@@ -184,19 +164,19 @@ else:
 # --- WEEKLY PILL INTAKE SUMMARY ---
 st.subheader("📊 Weekly Pill Intake Summary")
 
-# Get the date range for the last 7 days
 now = datetime.datetime.now(IST)
 start_date = now - datetime.timedelta(days=6)
 end_date = now
 start_date_str = start_date.strftime("%d %b %Y")
 end_date_str = end_date.strftime("%d %b %Y")
 
-# Display the date range below the title
 st.markdown(f"**Showing data from {start_date_str} to {end_date_str}**")
 
+ordered_days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 weekly_data = {}
 
-for day, field in field_map.items():
+for day in ordered_days:
+    field = field_map[day]
     url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/fields/{field[-1]}.json?api_key={READ_API_KEY}&results=100"
     res = requests.get(url)
 
@@ -211,9 +191,18 @@ for day, field in field_map.items():
         weekly_data[day] = 0
 
 weekly_df = pd.DataFrame({
-    "Day": list(weekly_data.keys()),
-    "Pills Taken": list(weekly_data.values())
+    "Day": ordered_days,
+    "Pills Taken": [weekly_data[day] for day in ordered_days]
 })
 
-# Display weekly bar chart with the Y-axis starting from 0 and ensuring integer values on Y-Axis
-st.bar_chart(weekly_df.set_index("Day"), use_container_width=True)
+bar_chart = alt.Chart(weekly_df).mark_bar().encode(
+    x=alt.X("Day", sort=ordered_days, title="Day of Week"),
+    y=alt.Y("Pills Taken", title="Total Pills Taken"),
+    color=alt.value("#4CAF50")
+).properties(
+    width=600,
+    height=400,
+    title="Weekly Pill Intake"
+)
+
+st.altair_chart(bar_chart, use_container_width=True)
