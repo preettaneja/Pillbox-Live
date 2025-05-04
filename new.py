@@ -3,7 +3,6 @@ import pandas as pd
 import datetime
 import requests
 import pytz
-import matplotlib.pyplot as plt
 import numpy as np
 import altair as alt  # Required for ordered weekly chart
 
