@@ -3,7 +3,32 @@ import pandas as pd
 import datetime
 import requests
 import pytz
+import matplotlib.pyplot as plt
 import numpy as np
+
+# Dummy credentials
+USERNAME = "admin"
+PASSWORD = "1234"
+
+# Initialize session state
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+def login():
+    st.title("🔐 Login to Smart Pillbox Dashboard")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if username == USERNAME and password == PASSWORD:
+            st.session_state.logged_in = True
+            st.success("✅ Login successful!")
+            st.rerun()
+        else:
+            st.error("❌ Invalid credentials")
+
+if not st.session_state.logged_in:
+    login()
+    st.stop()  # Prevent the rest of the app from rendering
 
 # CONFIG
 st.set_page_config(page_title="Smart Pillbox", page_icon="💊", layout="centered")
