@@ -84,10 +84,10 @@ def fetch_data_for_day(field_num):
     if response.status_code == 200:
         feeds = response.json().get("feeds", [])
         times = [convert_to_ist(feed["created_at"]) for feed in feeds]
-      values = [int(feed.get(f"field{field_num}") or 0) for feed in feeds]:
-        df = pd.DataFrame({"Time": times, "Pill Taken": values})
-        df["Status"] = df["Pill Taken"].apply(lambda x: "Yes" if x > 0 else "No")
-        return df
+      values = [int(feed.get(f"field{field_num}") or 0) for feed in feeds]
+      df = pd.DataFrame({"Time": times, "Pill Taken": values})
+      df["Status"] = df["Pill Taken"].apply(lambda x: "Yes" if x > 0 else "No")
+      return df
     return pd.DataFrame()
 
 def get_y_axis_ticks(max_value):
