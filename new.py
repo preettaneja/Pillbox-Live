@@ -78,13 +78,20 @@ def convert_to_ist(utc_string):
     dt_utc = datetime.datetime.strptime(utc_string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
     return dt_utc.astimezone(IST)
 
+def is_int(val):
+    try:
+        int(val)
+        return True
+    except (ValueError, TypeError):
+        return False
+
 def fetch_data_for_day(field_num):
     url = f"https://api.thingspeak.com/channels/{CHANNEL_ID}/fields/{field_num}.json?api_key={READ_API_KEY}&results=100"
     response = requests.get(url)
     if response.status_code == 200:
         feeds = response.json().get("feeds", [])
         times = [convert_to_ist(feed["created_at"]) for feed in feeds]
-        values = [int(feed.get(f"field{field_num}") or 0) for feed in feeds]
+        values = [int(feed.get(f"field{field_num}")) if is_int(feed.get(f"field{field_num}")) else 0 for feed in feeds]
         df = pd.DataFrame({"Time": times, "Pill Taken": values})
         df["Status"] = df["Pill Taken"].apply(lambda x: "Yes" if x > 0 else "No")
         return df
